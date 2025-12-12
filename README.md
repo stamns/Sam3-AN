@@ -67,6 +67,9 @@ pip install torch==2.7.0 torchvision torchaudio --index-url https://download.pyt
 
 # 3. 安装所有依赖
 pip install -r requirements.txt
+
+# 4.下载sam3.pt 模型本体，放置在工作目录下
+https://www.modelscope.cn/models/facebook/sam3
 ```
 
 > **注意**: SAM3 核心代码已包含在 `SAM_src/` 目录中，无需额外安装。
