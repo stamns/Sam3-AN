@@ -20,6 +20,9 @@
 | **框选分割** | 绘制边界框指定分割区域，支持正/负样本框 |
 | **手动绘制** | 多边形工具手动绘制标注区域 |
 | **批量分割** | 对多张图片进行批量自动分割 |
+<img width="1280" height="720" alt="image" src="https://github.com/user-attachments/assets/7c352b9b-fb51-44d3-a738-451ecae92eeb" />
+<img width="1280" height="720" alt="image" src="https://github.com/user-attachments/assets/44092ea3-2755-476c-82ed-036e4f154193" />
+<img width="1265" height="615" alt="image" src="https://github.com/user-attachments/assets/4da2106e-77dc-421c-945e-c42f26dff1d9" />
 
 ### 🎯 正负样本系统
 
