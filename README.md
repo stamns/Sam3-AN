@@ -87,7 +87,7 @@ https://www.modelscope.cn/models/facebook/sam3
 python app.py
 ```
 
-启动后会自动打开浏览器访问 http://localhost:52366
+启动后会自动打开浏览器访问 http://localhost:5000
 
 ## 📖 使用指南
 
