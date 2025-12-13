@@ -8,7 +8,7 @@
 </p>
 
 基于 **SAM3 (Segment Anything Model 3)** 的智能数据标注工具，支持图像分割标注。通过文本提示、点击、框选等多种方式快速生成高质量标注数据。
-- [Linuxdo 论坛使用介绍 ](https://linux.do/t/topic/1306118)
+- [ 使用介绍 ](https://linux.do/t/topic/1306118)
   
 ## ✨ 功能特性
 
