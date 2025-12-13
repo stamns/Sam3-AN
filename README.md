@@ -327,6 +327,8 @@ MIT License
 
 - [SAM3 - Segment Anything Model 3](https://github.com/facebookresearch/sam3)
 - [Linuxdo](https://Linux.do/)
+- [Gemini](https://gemini.google.com/)
+- [ChatGPT](https://chatgpt.com/)
 - [Flask](https://flask.palletsprojects.com/)
 - [PyTorch](https://pytorch.org/)
 
