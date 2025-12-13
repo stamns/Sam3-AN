@@ -87,7 +87,7 @@ https://www.modelscope.cn/models/facebook/sam3
 python app.py
 ```
 
-启动后会自动打开浏览器访问 http://localhost:5000
+启动后会自动打开浏览器访问 http://localhost:52366
 
 ## 📖 使用指南
 
@@ -258,7 +258,7 @@ POST /api/ai/test               # 测试 API 配置
 | API 密钥 | 你的 API Key | `sk-xxx...` |
 | 模型名称 | 使用的模型 | `deepseek-chat` |
 
-支持的 API 服务：
+支持的 API 服务：（openai格式基本都支持）
 - DeepSeek: `https://api.deepseek.com`
 - 通义千问: `https://dashscope.aliyuncs.com/compatible-mode`
 - Moonshot: `https://api.moonshot.cn`
