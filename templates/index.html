@@ -326,28 +326,51 @@
 
     <!-- 导出模态框 -->
     <div class="modal fade" id="exportModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">导出数据集</h5>
+                    <h5 class="modal-title"><i class="bi bi-download me-2"></i>导出数据集</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">导出格式</label>
-                        <select class="form-select" id="exportFormat">
-                            <option value="yolo">YOLO (检测+分割)</option>
-                            <option value="coco">COCO (实例分割)</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">输出目录</label>
-                        <input type="text" class="form-control" id="exportOutputDir"
-                               placeholder="C:\path\to\export">
-                    </div>
-                    <div class="alert alert-info small">
-                        <i class="bi bi-info-circle"></i>
-                        数据将自动按 8:1:1 比例分割为 train/val/test
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">导出格式</label>
+                                <select class="form-select" id="exportFormat">
+                                    <option value="yolo">YOLO (检测+分割)</option>
+                                    <option value="coco">COCO (实例分割)</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">输出目录</label>
+                                <input type="text" class="form-control" id="exportOutputDir"
+                                       placeholder="C:\path\to\export">
+                            </div>
+                            <input type="hidden" id="exportSmoothLevel" value="medium">
+                            <div class="alert alert-info small">
+                                <i class="bi bi-info-circle"></i>
+                                数据将自动按 8:1:1 比例分割为 train/val/test
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">
+                                <i class="bi bi-eye me-1"></i>导出预览
+                            </label>
+                            <div class="export-preview-container" id="exportPreviewContainer">
+                                <div class="preview-placeholder">
+                                    <i class="bi bi-image"></i>
+                                    <p>点击"生成预览"查看效果</p>
+                                </div>
+                                <img id="exportPreviewImage" style="display: none; max-width: 100%; max-height: 300px; border-radius: 8px;">
+                            </div>
+                            <div class="d-flex gap-2 mt-2">
+                                <button class="btn btn-outline-primary btn-sm flex-grow-1" onclick="generateExportPreview()">
+                                    <i class="bi bi-arrow-clockwise"></i> 刷新预览
+                                </button>
+                            </div>
+                            <div id="exportPreviewStats" class="small text-muted mt-2" style="display: none;"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -440,6 +463,20 @@
                 <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
             </div>
             <div class="toast-body" id="toastBody"></div>
+        </div>
+    </div>
+
+    <!-- 图片放大查看器 -->
+    <div class="image-viewer-overlay" id="imageViewer" onclick="closeImageViewer(event)">
+        <div class="image-viewer-container" onclick="event.stopPropagation()">
+            <span class="image-viewer-info" id="imageViewerInfo"></span>
+            <button class="image-viewer-close" onclick="closeImageViewer()">&times;</button>
+            <img class="image-viewer-img" id="imageViewerImg" src="" alt="预览图">
+            <div class="image-viewer-controls">
+                <button onclick="zoomViewerImage(0.8)"><i class="bi bi-dash-lg"></i> 缩小</button>
+                <button onclick="resetViewerZoom()"><i class="bi bi-arrows-angle-contract"></i> 重置</button>
+                <button onclick="zoomViewerImage(1.25)"><i class="bi bi-plus-lg"></i> 放大</button>
+            </div>
         </div>
     </div>
 

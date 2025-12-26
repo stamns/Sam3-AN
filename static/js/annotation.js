@@ -1065,6 +1065,7 @@ async function segmentByPoints() {
             invalidateStaticCache();  // 标注变化，更新缓存
             updateAnnotationList();
             redraw();
+            await saveAnnotations(false);  // 自动保存
             showToast('成功', `检测到 ${data.results.length} 个 "${className}"`);
         } else {
             showToast('提示', '未检测到对象');
@@ -1113,6 +1114,7 @@ async function segmentByBoxes(boxes) {
             invalidateStaticCache();  // 标注变化，更新缓存
             updateAnnotationList();
             redraw();
+            await saveAnnotations(false);  // 自动保存
             showToast('成功', `检测到 ${data.results.length} 个 "${className}"`);
         } else {
             showToast('提示', '未检测到对象');
@@ -1296,6 +1298,7 @@ async function executeTextSegment(prompt, className) {
                 invalidateStaticCache();  // 标注变化，更新缓存
                 updateAnnotationList();
                 redraw();
+                await saveAnnotations(false);  // 自动保存
                 const msg = wasTranslated
                     ? `检测到 ${data.results.length} 个 "${className}" (翻译: ${actualPrompt})`
                     : `检测到 ${data.results.length} 个 "${className}"`;
@@ -2038,11 +2041,17 @@ function showExportModal() {
         return;
     }
     new bootstrap.Modal(document.getElementById('exportModal')).show();
+
+    // 自动开始预览
+    setTimeout(() => {
+        generateExportPreview();
+    }, 300);
 }
 
 async function exportDataset() {
     const format = document.getElementById('exportFormat').value;
     const outputDir = document.getElementById('exportOutputDir').value.trim();
+    const smoothLevel = document.getElementById('exportSmoothLevel').value;
 
     if (!outputDir) {
         showToast('提示', '请输入输出目录');
@@ -2057,16 +2066,18 @@ async function exportDataset() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 project_id: state.projectId,
-                output_dir: outputDir
+                output_dir: outputDir,
+                smooth_level: smoothLevel
             })
         });
 
         const data = await response.json();
         if (data.success) {
             const result = data.result;
+            const smoothNames = {none: '无', low: '低', medium: '中等', high: '高', ultra: '超高'};
             showToast('成功',
                 `导出完成!\nTrain: ${result.train}, Val: ${result.val}, Test: ${result.test}\n` +
-                `总标注: ${result.total_annotations}`
+                `总标注: ${result.total_annotations}\n平滑级别: ${smoothNames[smoothLevel]}`
             );
             bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
         }
@@ -2076,6 +2087,231 @@ async function exportDataset() {
 
     hideLoading();
 }
+
+// ==================== 导出预览 ====================
+
+async function generateExportPreview() {
+    if (!state.projectId) {
+        showToast('提示', '请先选择项目');
+        return;
+    }
+
+    const smoothLevel = document.getElementById('exportSmoothLevel').value;
+    const previewImage = document.getElementById('exportPreviewImage');
+    const placeholder = document.querySelector('.preview-placeholder');
+    const statsDiv = document.getElementById('exportPreviewStats');
+
+    // 显示加载状态
+    if (placeholder) placeholder.innerHTML = '<div class="spinner-border spinner-border-sm"></div><p>生成预览中...</p>';
+
+    try {
+        const response = await fetch('/api/export/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                project_id: state.projectId,
+                image_index: state.currentIndex,
+                smooth_level: smoothLevel,
+                show_polygon: true,
+                show_fill: true,
+                opacity: 0.4
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            previewImage.src = data.preview;
+            previewImage.style.display = 'block';
+            if (placeholder) placeholder.style.display = 'none';
+
+            // 显示统计信息
+            const stats = data.stats;
+            const smoothNames = {none: '无平滑', low: '低', medium: '中等', high: '高', ultra: '超高'};
+            statsDiv.innerHTML = `
+                <i class="bi bi-info-circle me-1"></i>
+                文件: ${stats.filename} |
+                标注数: ${stats.total_annotations} |
+                平滑: ${smoothNames[stats.smooth_level]} |
+                尺寸: ${stats.image_size[0]}x${stats.image_size[1]}
+            `;
+            statsDiv.style.display = 'block';
+        } else {
+            showToast('错误', data.error || '生成预览失败', 'danger');
+            if (placeholder) {
+                placeholder.innerHTML = '<i class="bi bi-exclamation-triangle"></i><p>预览生成失败</p>';
+                placeholder.style.display = 'block';
+            }
+        }
+    } catch (error) {
+        showToast('错误', error.message, 'danger');
+        if (placeholder) {
+            placeholder.innerHTML = '<i class="bi bi-exclamation-triangle"></i><p>预览生成失败</p>';
+            placeholder.style.display = 'block';
+        }
+    }
+}
+
+function updateExportPreview() {
+    // 如果预览图片已显示，则自动更新预览
+    const previewImage = document.getElementById('exportPreviewImage');
+    if (previewImage && previewImage.style.display !== 'none') {
+        generateExportPreview();
+    }
+}
+
+async function showSmoothCompare() {
+    if (!state.projectId) {
+        showToast('提示', '请先选择项目');
+        return;
+    }
+
+    // 获取当前图片的标注列表
+    const annotations = state.annotations || [];
+    if (annotations.length === 0) {
+        showToast('提示', '当前图片没有标注，无法对比');
+        return;
+    }
+
+    // 填充标注选择下拉框
+    const select = document.getElementById('compareAnnotationSelect');
+    select.innerHTML = annotations.map((ann, i) =>
+        `<option value="${i}">${i + 1}. ${ann.class_name || ann.label || '未命名'}</option>`
+    ).join('');
+
+    // 显示模态框
+    new bootstrap.Modal(document.getElementById('smoothCompareModal')).show();
+
+    // 生成对比预览
+    await updateSmoothCompare();
+}
+
+async function updateSmoothCompare() {
+    const annotationIndex = parseInt(document.getElementById('compareAnnotationSelect').value);
+    const loadingDiv = document.getElementById('smoothCompareLoading');
+    const gridDiv = document.getElementById('smoothCompareGrid');
+
+    // 显示加载状态
+    loadingDiv.style.display = 'block';
+    gridDiv.style.opacity = '0.3';
+
+    try {
+        const response = await fetch('/api/export/preview_compare', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                project_id: state.projectId,
+                image_index: state.currentIndex,
+                annotation_index: annotationIndex
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            // 更新各级别的预览图片
+            const levels = ['none', 'low', 'medium', 'high', 'ultra'];
+            levels.forEach(level => {
+                const img = document.getElementById(`compare${level.charAt(0).toUpperCase() + level.slice(1)}`);
+                if (img && data.previews[level]) {
+                    img.src = data.previews[level];
+                }
+            });
+
+            // 显示原始点数
+            document.getElementById('compareNoneInfo').textContent = `原始: ${data.original_points} 点`;
+        } else {
+            showToast('错误', data.error || '生成对比失败', 'danger');
+        }
+    } catch (error) {
+        showToast('错误', error.message, 'danger');
+    }
+
+    // 隐藏加载状态
+    loadingDiv.style.display = 'none';
+    gridDiv.style.opacity = '1';
+}
+
+// ==================== 图片放大查看器 ====================
+
+let viewerZoom = 1;
+
+function openImageViewer(imgSrc, info = '') {
+    const viewer = document.getElementById('imageViewer');
+    const viewerImg = document.getElementById('imageViewerImg');
+    const viewerInfo = document.getElementById('imageViewerInfo');
+
+    viewerImg.src = imgSrc;
+    viewerInfo.textContent = info;
+    viewerZoom = 1;
+    viewerImg.style.transform = `scale(${viewerZoom})`;
+
+    viewer.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeImageViewer(event) {
+    // 如果点击的是背景或关闭按钮，则关闭
+    if (!event || event.target.id === 'imageViewer' || event.target.classList.contains('image-viewer-close')) {
+        const viewer = document.getElementById('imageViewer');
+        viewer.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+function zoomViewerImage(factor) {
+    const viewerImg = document.getElementById('imageViewerImg');
+    viewerZoom *= factor;
+    viewerZoom = Math.max(0.2, Math.min(5, viewerZoom)); // 限制缩放范围
+    viewerImg.style.transform = `scale(${viewerZoom})`;
+}
+
+function resetViewerZoom() {
+    const viewerImg = document.getElementById('imageViewerImg');
+    viewerZoom = 1;
+    viewerImg.style.transform = `scale(${viewerZoom})`;
+}
+
+// 为预览图添加点击事件
+function initImageViewerEvents() {
+    // 导出预览图
+    const exportPreview = document.getElementById('exportPreviewImage');
+    if (exportPreview) {
+        exportPreview.onclick = function() {
+            if (this.src && this.style.display !== 'none') {
+                openImageViewer(this.src, '导出预览');
+            }
+        };
+    }
+
+    // 对比预览图
+    const compareImgs = document.querySelectorAll('.compare-img');
+    compareImgs.forEach(img => {
+        img.onclick = function() {
+            if (this.src) {
+                const levelName = this.id.replace('compare', '');
+                openImageViewer(this.src, `平滑级别: ${levelName}`);
+            }
+        };
+    });
+}
+
+// ESC 键关闭查看器
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeImageViewer();
+    }
+});
+
+// 鼠标滚轮缩放
+document.getElementById('imageViewer')?.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    zoomViewerImage(factor);
+});
+
+// 页面加载后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    initImageViewerEvents();
+});
 
 // ==================== 缩放控制 ====================
 

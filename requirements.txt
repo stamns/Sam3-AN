@@ -1,6 +1,4 @@
 # SAM3 AN - 数据标注工具依赖
-# 安装命令: pip install -r requirements.txt
-
 
 # ==================== Flask Web框架 ====================
 flask>=2.3.0

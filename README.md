@@ -8,7 +8,8 @@
 </p>
 
 基于 **SAM3 (Segment Anything Model 3)** 的智能数据标注工具，支持图像分割标注。通过文本提示、点击、框选等多种方式快速生成高质量标注数据。
-
+- [ 使用介绍 ](https://linux.do/t/topic/1306118)
+  
 ## ✨ 功能特性
 
 ### 🖼️ 图像标注
@@ -20,6 +21,14 @@
 | **框选分割** | 绘制边界框指定分割区域，支持正/负样本框 |
 | **手动绘制** | 多边形工具手动绘制标注区域 |
 | **批量分割** | 对多张图片进行批量自动分割 |
+
+
+![屏幕截图 2025-12-13 170932](https://github.com/user-attachments/assets/a28c3a06-2c07-41ee-a605-ab35ef91a8ce)
+
+
+<img width="1280" height="720" alt="image" src="https://github.com/user-attachments/assets/7c352b9b-fb51-44d3-a738-451ecae92eeb" />
+<img width="1280" height="720" alt="image" src="https://github.com/user-attachments/assets/44092ea3-2755-476c-82ed-036e4f154193" />
+<img width="1265" height="615" alt="image" src="https://github.com/user-attachments/assets/4da2106e-77dc-421c-945e-c42f26dff1d9" />
 
 ### 🎯 正负样本系统
 
@@ -59,6 +68,7 @@
 ### 安装步骤
 
 ```bash
+（建议先创建虚拟环境）
 # 1. 进入项目目录
 cd Sam3 an
 
@@ -67,6 +77,9 @@ pip install torch==2.7.0 torchvision torchaudio --index-url https://download.pyt
 
 # 3. 安装所有依赖
 pip install -r requirements.txt
+
+# 4.下载sam3.pt 模型本体，放置在工作目录下
+https://www.modelscope.cn/models/facebook/sam3
 ```
 
 > **注意**: SAM3 核心代码已包含在 `SAM_src/` 目录中，无需额外安装。
@@ -235,20 +248,12 @@ POST /api/ai/translate          # 翻译文本
 POST /api/ai/test               # 测试 API 配置
 ```
 
-### 视频
-
-```http
-POST /api/video/start_session   # 开始视频会话
-POST /api/video/add_prompt      # 添加视频提示
-POST /api/video/propagate       # 传播分割
-POST /api/video/close_session   # 关闭会话
-```
 
 ## ⚙️ 配置说明
 
 ### AI 翻译配置
 
-点击工具栏的 AI 配置按钮（机器人图标）：
+点击工具栏的 AI 翻译配置按钮：
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
@@ -256,7 +261,7 @@ POST /api/video/close_session   # 关闭会话
 | API 密钥 | 你的 API Key | `sk-xxx...` |
 | 模型名称 | 使用的模型 | `deepseek-chat` |
 
-支持的 API 服务：
+支持的 API 服务：（openai格式基本都支持）
 - DeepSeek: `https://api.deepseek.com`
 - 通义千问: `https://dashscope.aliyuncs.com/compatible-mode`
 - Moonshot: `https://api.moonshot.cn`
@@ -325,6 +330,9 @@ MIT License
 ## 🙏 致谢
 
 - [SAM3 - Segment Anything Model 3](https://github.com/facebookresearch/sam3)
+- [Linuxdo](https://Linux.do/)
+- [Gemini](https://gemini.google.com/)
+- [ChatGPT](https://chatgpt.com/)
 - [Flask](https://flask.palletsprojects.com/)
 - [PyTorch](https://pytorch.org/)
 

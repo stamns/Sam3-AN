@@ -8,13 +8,90 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 from PIL import Image
+import numpy as np
+import cv2
 
 
 class COCOExporter:
     """COCO格式导出器"""
 
+    def __init__(self):
+        # 平滑参数配置（在mask级别进行形态学平滑）
+        self.smooth_params = {
+            'none': {'kernel_size': 0, 'simplify_epsilon': 0.002},
+            'low': {'kernel_size': 3, 'simplify_epsilon': 0.0015},
+            'medium': {'kernel_size': 5, 'simplify_epsilon': 0.001},
+            'high': {'kernel_size': 7, 'simplify_epsilon': 0.0008},
+            'ultra': {'kernel_size': 11, 'simplify_epsilon': 0.0005},
+        }
+
+    def _smooth_polygon_via_mask(self, polygon: list, kernel_size: int) -> np.ndarray:
+        """通过渲染到mask再提取的方式平滑多边形"""
+        if kernel_size == 0:
+            return np.array(polygon, dtype=np.float64)
+
+        points = np.array(polygon, dtype=np.float64)
+        x_min, y_min = points.min(axis=0)
+        x_max, y_max = points.max(axis=0)
+
+        margin = kernel_size * 2 + 10
+        x_min = max(0, int(x_min) - margin)
+        y_min = max(0, int(y_min) - margin)
+        x_max = int(x_max) + margin
+        y_max = int(y_max) + margin
+
+        width = x_max - x_min
+        height = y_max - y_min
+
+        mask = np.zeros((height, width), dtype=np.uint8)
+        shifted_points = points - np.array([x_min, y_min])
+        cv2.fillPoly(mask, [shifted_points.astype(np.int32)], 255)
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        smoothed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        smoothed = cv2.morphologyEx(smoothed, cv2.MORPH_OPEN, kernel)
+
+        if kernel_size >= 5:
+            blur_size = kernel_size | 1
+            smoothed = cv2.GaussianBlur(smoothed, (blur_size, blur_size), 0)
+            _, smoothed = cv2.threshold(smoothed, 127, 255, cv2.THRESH_BINARY)
+
+        contours, _ = cv2.findContours(smoothed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)
+        if not contours:
+            return points
+
+        largest = max(contours, key=cv2.contourArea)
+        new_points = largest.reshape(-1, 2).astype(np.float64)
+        new_points += np.array([x_min, y_min])
+
+        return new_points
+
+    def _adaptive_simplify(self, points: np.ndarray, epsilon_factor: float) -> np.ndarray:
+        """自适应简化多边形"""
+        if len(points) < 3:
+            return points
+
+        contour = points.reshape(-1, 1, 2).astype(np.float32)
+        perimeter = cv2.arcLength(contour, True)
+        epsilon = epsilon_factor * perimeter
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+
+        return approx.reshape(-1, 2)
+
+    def smooth_polygon(self, polygon: list, smooth_level: str = 'medium') -> list:
+        """对多边形进行平滑处理（通过mask级别的形态学操作）"""
+        if not polygon or len(polygon) < 3:
+            return polygon
+
+        params = self.smooth_params.get(smooth_level, self.smooth_params['medium'])
+        smoothed = self._smooth_polygon_via_mask(polygon, params['kernel_size'])
+        result = self._adaptive_simplify(smoothed, params['simplify_epsilon'])
+
+        return result.tolist()
+
     def export(self, project: dict, output_dir: str,
-               split_ratio: tuple = (0.8, 0.1, 0.1)) -> dict:
+               split_ratio: tuple = (0.8, 0.1, 0.1),
+               smooth_level: str = 'medium') -> dict:
         """
         导出为COCO格式
 
@@ -22,10 +99,12 @@ class COCOExporter:
             project: 项目数据
             output_dir: 输出目录
             split_ratio: (train, val, test) 比例
+            smooth_level: 多边形平滑级别 'none', 'low', 'medium', 'high', 'ultra'
 
         Returns:
             导出结果统计
         """
+        self.current_smooth_level = smooth_level
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -153,9 +232,11 @@ class COCOExporter:
                 # 处理分割
                 polygon = ann.get('polygon', [])
                 if polygon and len(polygon) >= 3:
+                    # 应用平滑处理
+                    smoothed_polygon = self.smooth_polygon(polygon, self.current_smooth_level)
                     # 转换为COCO格式 [x1, y1, x2, y2, ...]
                     segmentation = []
-                    for point in polygon:
+                    for point in smoothed_polygon:
                         segmentation.extend([float(point[0]), float(point[1])])
                     coco_ann['segmentation'] = [segmentation]
 

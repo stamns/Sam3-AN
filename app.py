@@ -413,6 +413,7 @@ def export_yolo():
     data = request.json
     project_id = data.get('project_id')
     output_dir = data.get('output_dir', '')
+    smooth_level = data.get('smooth_level', 'medium')
 
     try:
         project = annotation_manager.get_project(project_id)
@@ -420,7 +421,7 @@ def export_yolo():
             return jsonify({'success': False, 'error': '项目不存在'})
 
         exporter = YOLOExporter()
-        result = exporter.export(project, output_dir)
+        result = exporter.export(project, output_dir, smooth_level=smooth_level)
         return jsonify({'success': True, 'result': result})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -432,6 +433,7 @@ def export_coco():
     data = request.json
     project_id = data.get('project_id')
     output_dir = data.get('output_dir', '')
+    smooth_level = data.get('smooth_level', 'medium')
 
     try:
         project = annotation_manager.get_project(project_id)
@@ -439,9 +441,212 @@ def export_coco():
             return jsonify({'success': False, 'error': '项目不存在'})
 
         exporter = COCOExporter()
-        result = exporter.export(project, output_dir)
+        result = exporter.export(project, output_dir, smooth_level=smooth_level)
         return jsonify({'success': True, 'result': result})
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+# ==================== 导出预览API ====================
+
+@app.route('/api/export/preview', methods=['POST'])
+def export_preview():
+    """生成导出预览图片，显示平滑后的分割覆盖效果"""
+    import cv2
+    import numpy as np
+    import base64
+    from io import BytesIO
+
+    data = request.json
+    project_id = data.get('project_id')
+    image_index = data.get('image_index', 0)
+    smooth_level = data.get('smooth_level', 'medium')
+    show_polygon = data.get('show_polygon', True)
+    show_fill = data.get('show_fill', True)
+    opacity = data.get('opacity', 0.4)
+
+    try:
+        project = annotation_manager.get_project(project_id)
+        if not project:
+            return jsonify({'success': False, 'error': '项目不存在'})
+
+        images = project.get('images', [])
+        if image_index >= len(images):
+            return jsonify({'success': False, 'error': '图片索引超出范围'})
+
+        img_info = images[image_index]
+        image_path = img_info.get('path')
+
+        if not image_path or not os.path.exists(image_path):
+            return jsonify({'success': False, 'error': '图片文件不存在'})
+
+        # 读取原始图片
+        img = cv2.imread(image_path)
+        if img is None:
+            return jsonify({'success': False, 'error': '无法读取图片'})
+
+        overlay = img.copy()
+        annotations = img_info.get('annotations', [])
+
+        # 使用导出器的平滑方法
+        exporter = YOLOExporter()
+
+        # 颜色列表（BGR格式）
+        colors = [
+            (0, 255, 0),    # 绿色
+            (255, 0, 0),    # 蓝色
+            (0, 0, 255),    # 红色
+            (255, 255, 0),  # 青色
+            (255, 0, 255),  # 品红
+            (0, 255, 255),  # 黄色
+            (128, 0, 255),  # 紫色
+            (255, 128, 0),  # 橙色
+        ]
+
+        for i, ann in enumerate(annotations):
+            polygon = ann.get('polygon', [])
+            if not polygon or len(polygon) < 3:
+                continue
+
+            # 应用平滑处理
+            smoothed_polygon = exporter.smooth_polygon(polygon, smooth_level)
+
+            # 转换为numpy数组
+            pts = np.array(smoothed_polygon, dtype=np.int32)
+            color = colors[i % len(colors)]
+
+            # 绘制填充
+            if show_fill:
+                cv2.fillPoly(overlay, [pts], color)
+
+            # 绘制轮廓线
+            if show_polygon:
+                cv2.polylines(img, [pts], True, color, 2)
+
+        # 混合原图和覆盖层
+        if show_fill:
+            img = cv2.addWeighted(overlay, opacity, img, 1 - opacity, 0)
+
+        # 添加标注信息文字
+        for i, ann in enumerate(annotations):
+            polygon = ann.get('polygon', [])
+            if not polygon:
+                continue
+
+            smoothed_polygon = exporter.smooth_polygon(polygon, smooth_level)
+            if smoothed_polygon:
+                # 计算中心点
+                pts = np.array(smoothed_polygon)
+                cx = int(pts[:, 0].mean())
+                cy = int(pts[:, 1].mean())
+
+                label = ann.get('class_name') or ann.get('label', '')
+                color = colors[i % len(colors)]
+
+                # 绘制标签背景
+                (text_w, text_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                cv2.rectangle(img, (cx - 2, cy - text_h - 4), (cx + text_w + 2, cy + 2), color, -1)
+                cv2.putText(img, label, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+        # 转换为base64
+        _, buffer = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        img_base64 = base64.b64encode(buffer).decode('utf-8')
+
+        # 统计信息
+        stats = {
+            'total_annotations': len(annotations),
+            'smooth_level': smooth_level,
+            'image_size': [img.shape[1], img.shape[0]],
+            'filename': img_info.get('filename', '')
+        }
+
+        return jsonify({
+            'success': True,
+            'preview': f'data:image/jpeg;base64,{img_base64}',
+            'stats': stats
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/export/preview_compare', methods=['POST'])
+def export_preview_compare():
+    """生成多个平滑级别的对比预览"""
+    import cv2
+    import numpy as np
+    import base64
+
+    data = request.json
+    project_id = data.get('project_id')
+    image_index = data.get('image_index', 0)
+    annotation_index = data.get('annotation_index', 0)  # 指定要预览的标注索引
+
+    try:
+        project = annotation_manager.get_project(project_id)
+        if not project:
+            return jsonify({'success': False, 'error': '项目不存在'})
+
+        images = project.get('images', [])
+        if image_index >= len(images):
+            return jsonify({'success': False, 'error': '图片索引超出范围'})
+
+        img_info = images[image_index]
+        image_path = img_info.get('path')
+        annotations = img_info.get('annotations', [])
+
+        if annotation_index >= len(annotations):
+            return jsonify({'success': False, 'error': '标注索引超出范围'})
+
+        if not image_path or not os.path.exists(image_path):
+            return jsonify({'success': False, 'error': '图片文件不存在'})
+
+        # 读取原始图片
+        original_img = cv2.imread(image_path)
+        if original_img is None:
+            return jsonify({'success': False, 'error': '无法读取图片'})
+
+        exporter = YOLOExporter()
+        polygon = annotations[annotation_index].get('polygon', [])
+
+        if not polygon or len(polygon) < 3:
+            return jsonify({'success': False, 'error': '标注没有有效的多边形数据'})
+
+        # 生成不同平滑级别的预览
+        levels = ['none', 'low', 'medium', 'high', 'ultra']
+        previews = {}
+
+        for level in levels:
+            img = original_img.copy()
+            smoothed_polygon = exporter.smooth_polygon(polygon, level)
+            pts = np.array(smoothed_polygon, dtype=np.int32)
+
+            # 绘制填充和轮廓
+            overlay = img.copy()
+            cv2.fillPoly(overlay, [pts], (0, 255, 0))
+            img = cv2.addWeighted(overlay, 0.4, img, 0.6, 0)
+            cv2.polylines(img, [pts], True, (0, 255, 0), 2)
+
+            # 添加级别标签
+            cv2.putText(img, f'{level} ({len(smoothed_polygon)} pts)',
+                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+
+            # 转换为base64
+            _, buffer = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            previews[level] = f'data:image/jpeg;base64,{base64.b64encode(buffer).decode("utf-8")}'
+
+        return jsonify({
+            'success': True,
+            'previews': previews,
+            'original_points': len(polygon),
+            'annotation_label': annotations[annotation_index].get('class_name', '')
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
 
 
@@ -561,18 +766,30 @@ Rules:
             'temperature': 0.3
         }
 
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+        print(f"[AI翻译] 正在连接: {api_url}")
+
         response = requests.post(
             api_url,
             headers=headers,
             json=payload,
-            timeout=30
+            timeout=30,
+            verify=False  # 跳过SSL证书验证，解决WSL环境下的证书问题
         )
 
+        print(f"[AI翻译] 响应状态码: {response.status_code}")
+
         if response.status_code != 200:
-            return jsonify({
-                'success': False,
-                'error': f'API请求失败: {response.status_code}'
-            })
+            error_msg = f'API请求失败: {response.status_code}'
+            try:
+                error_data = response.json()
+                if 'error' in error_data:
+                    error_msg = error_data['error'].get('message', error_msg)
+            except:
+                pass
+            return jsonify({'success': False, 'error': error_msg})
 
         result = response.json()
         translated = result['choices'][0]['message']['content'].strip()
@@ -586,9 +803,13 @@ Rules:
         })
 
     except requests.exceptions.Timeout:
-        return jsonify({'success': False, 'error': 'API请求超时'})
-    except requests.exceptions.ConnectionError:
-        return jsonify({'success': False, 'error': 'API连接失败'})
+        return jsonify({'success': False, 'error': 'API请求超时 (30秒)'})
+    except requests.exceptions.SSLError as e:
+        print(f"[AI翻译] SSL错误: {e}")
+        return jsonify({'success': False, 'error': f'SSL证书错误'})
+    except requests.exceptions.ConnectionError as e:
+        print(f"[AI翻译] 连接错误: {e}")
+        return jsonify({'success': False, 'error': '无法连接到API服务器'})
     except Exception as e:
         print(f"[AI翻译错误] {e}")
         return jsonify({'success': False, 'error': str(e)})
@@ -597,6 +818,9 @@ Rules:
 @app.route('/api/ai/test', methods=['POST'])
 def ai_test():
     """测试AI API配置是否有效"""
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     data = request.json
     api_url = data.get('api_url', '').strip()
     api_key = data.get('api_key', '').strip()
@@ -626,12 +850,17 @@ def ai_test():
             'max_tokens': 10
         }
 
+        print(f"[AI测试] 正在连接: {api_url}")
+
         response = requests.post(
             api_url,
             headers=headers,
             json=payload,
-            timeout=15
+            timeout=30,
+            verify=False  # 跳过SSL证书验证，解决WSL环境下的证书问题
         )
+
+        print(f"[AI测试] 响应状态码: {response.status_code}")
 
         if response.status_code == 200:
             return jsonify({'success': True, 'message': 'API连接成功'})
@@ -646,17 +875,44 @@ def ai_test():
             return jsonify({'success': False, 'error': error_msg})
 
     except requests.exceptions.Timeout:
-        return jsonify({'success': False, 'error': '连接超时'})
-    except requests.exceptions.ConnectionError:
-        return jsonify({'success': False, 'error': '无法连接到API服务器'})
+        return jsonify({'success': False, 'error': '连接超时 (30秒)'})
+    except requests.exceptions.SSLError as e:
+        print(f"[AI测试] SSL错误: {e}")
+        return jsonify({'success': False, 'error': f'SSL证书错误: {str(e)[:100]}'})
+    except requests.exceptions.ConnectionError as e:
+        print(f"[AI测试] 连接错误: {e}")
+        return jsonify({'success': False, 'error': f'无法连接到API服务器，请检查网络或API地址是否正确'})
     except Exception as e:
+        print(f"[AI测试] 未知错误: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
 
-def open_browser(url, delay=1.5):
-    """延迟打开浏览器（独立窗口模式）"""
+def wait_for_server(url, timeout=30):
+    """等待服务器启动就绪"""
     import time
-    time.sleep(delay)
+    import urllib.request
+    import urllib.error
+
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            return True
+        except (urllib.error.URLError, urllib.error.HTTPError):
+            time.sleep(0.3)
+    return False
+
+
+def open_browser(url):
+    """等待服务就绪后打开浏览器（独立窗口模式）"""
+    print("[INFO] 等待服务启动...")
+
+    # 等待服务就绪
+    if not wait_for_server(url):
+        print("[ERROR] 服务启动超时，请手动打开浏览器访问:", url)
+        return
+
+    print("[INFO] 服务已就绪，正在打开浏览器...")
 
     # 尝试不同的浏览器路径
     chrome_paths = [
@@ -705,12 +961,12 @@ if __name__ == '__main__':
     print("SAM3 AN - 数据标注工具")
     print("=" * 50)
 
-    # 在后台线程中打开浏览器
+    # 在后台线程中等待服务就绪后打开浏览器
     url = "http://localhost:5000"
     threading.Thread(target=open_browser, args=(url,), daemon=True).start()
 
     print(f"[INFO] 正在启动服务器...")
-    print(f"[INFO] 浏览器将自动打开")
+    print(f"[INFO] 服务就绪后将自动打开浏览器")
     print("=" * 50)
 
     # 启动Flask服务器（关闭debug模式以避免重复打开浏览器）
