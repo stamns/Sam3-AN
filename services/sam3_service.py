@@ -56,20 +56,133 @@ class SAM3Service:
             self.current_image_path = image_path
             print(f"[DEBUG] 图像尺寸: {self._image_size}")
 
-    def _mask_to_polygon(self, mask: np.ndarray) -> list:
-        """将mask转换为多边形"""
+    def _smooth_mask(self, mask: np.ndarray, smooth_level: str) -> np.ndarray:
+        """在 mask 级别进行形态学平滑，从根本上消除锯齿
+
+        Args:
+            mask: 二值mask (0/255)
+            smooth_level: 平滑级别
+
+        Returns:
+            平滑后的mask
+        """
+        import cv2
+
+        # 平滑参数：kernel_size 越大，平滑效果越强
+        smooth_params = {
+            'none': {'kernel_size': 0},
+            'low': {'kernel_size': 3},
+            'medium': {'kernel_size': 5},
+            'high': {'kernel_size': 7},
+            'ultra': {'kernel_size': 11},
+        }
+
+        params = smooth_params.get(smooth_level, smooth_params['medium'])
+        kernel_size = params['kernel_size']
+
+        if kernel_size == 0:
+            return mask
+
+        # 使用形态学操作平滑边缘
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+
+        # 先闭运算（填充小孔），再开运算（去除毛刺）
+        smoothed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        smoothed = cv2.morphologyEx(smoothed, cv2.MORPH_OPEN, kernel)
+
+        # 使用高斯模糊 + 阈值进一步平滑边缘
+        if kernel_size >= 5:
+            blur_size = kernel_size | 1  # 确保是奇数
+            smoothed = cv2.GaussianBlur(smoothed, (blur_size, blur_size), 0)
+            _, smoothed = cv2.threshold(smoothed, 127, 255, cv2.THRESH_BINARY)
+
+        return smoothed
+
+    def _adaptive_simplify(self, points: np.ndarray, epsilon_factor: float) -> np.ndarray:
+        """自适应简化多边形"""
+        import cv2
+        if len(points) < 3:
+            return points
+
+        contour = points.reshape(-1, 1, 2).astype(np.float32)
+        perimeter = cv2.arcLength(contour, True)
+        epsilon = epsilon_factor * perimeter
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+
+        return approx.reshape(-1, 2)
+
+    def _mask_to_polygon(self, mask: np.ndarray, smooth_level: str = 'medium') -> list:
+        """将mask转换为多边形，在mask级别进行平滑处理
+
+        Args:
+            mask: 二值mask
+            smooth_level: 平滑级别 'none', 'low', 'medium', 'high', 'ultra'
+
+        Returns:
+            多边形点列表 [[x, y], ...]
+        """
         import cv2
         if mask.dtype != np.uint8:
             mask = (mask > 0.5).astype(np.uint8) * 255
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # 在 mask 级别进行形态学平滑（关键步骤！）
+        smoothed_mask = self._smooth_mask(mask, smooth_level)
+
+        # 使用 CHAIN_APPROX_TC89_KCOS 算法提取更平滑的轮廓
+        contours, _ = cv2.findContours(smoothed_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)
         if not contours:
             return []
 
         largest = max(contours, key=cv2.contourArea)
-        epsilon = 0.005 * cv2.arcLength(largest, True)
-        approx = cv2.approxPolyDP(largest, epsilon, True)
-        return approx.reshape(-1, 2).tolist()
+        points = largest.reshape(-1, 2).astype(np.float64)
+
+        # 简化参数
+        simplify_params = {
+            'none': 0.002,
+            'low': 0.0015,
+            'medium': 0.001,
+            'high': 0.0008,
+            'ultra': 0.0005,
+        }
+
+        epsilon_factor = simplify_params.get(smooth_level, 0.001)
+        result = self._adaptive_simplify(points, epsilon_factor)
+
+        return result.tolist()
+
+    def smooth_polygon(self, polygon: list, smooth_level: str = 'medium') -> list:
+        """对已有多边形进行平滑处理（使用 Chaikin 算法，不会收缩）
+
+        Args:
+            polygon: 多边形点列表 [[x, y], ...]
+            smooth_level: 平滑级别 'none', 'low', 'medium', 'high', 'ultra'
+
+        Returns:
+            平滑后的多边形点列表
+        """
+        if not polygon or len(polygon) < 3:
+            return polygon
+
+        smooth_params = {
+            'none': {'chaikin_iterations': 0, 'simplify_epsilon': 0.003},
+            'low': {'chaikin_iterations': 1, 'simplify_epsilon': 0.002},
+            'medium': {'chaikin_iterations': 2, 'simplify_epsilon': 0.0015},
+            'high': {'chaikin_iterations': 3, 'simplify_epsilon': 0.001},
+            'ultra': {'chaikin_iterations': 4, 'simplify_epsilon': 0.0008},
+        }
+
+        params = smooth_params.get(smooth_level, smooth_params['medium'])
+        points = np.array(polygon, dtype=np.float64)
+
+        if params['chaikin_iterations'] == 0:
+            result = self._adaptive_simplify(points, params['simplify_epsilon'])
+            return result.tolist()
+
+        # Chaikin 平滑 + 简化
+        smoothed = self._chaikin_smooth(points, params['chaikin_iterations'])
+        result = self._adaptive_simplify(smoothed, params['simplify_epsilon'])
+
+        return result.tolist()
 
     def segment_by_text(self, image_path: str, prompt: str, confidence: float = 0.5) -> list:
         """文本提示分割"""

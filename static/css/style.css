@@ -1157,6 +1157,29 @@ body {
     color: #fff;
 }
 
+/* 下拉框选项样式 - 修复深色主题下看不清的问题 */
+.form-select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23fcee0a' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px 12px;
+    padding-right: 2.5rem;
+    cursor: pointer;
+}
+
+.form-select option {
+    background-color: #1a1a1f;
+    color: #ffffff;
+    padding: 10px 14px;
+}
+
+.form-select option:hover,
+.form-select option:focus,
+.form-select option:checked {
+    background-color: #2a2a35;
+    color: var(--primary);
+}
+
 .form-control::placeholder {
     color: rgba(255, 255, 255, 0.4);
     font-family: inherit;
@@ -1760,4 +1783,235 @@ body {
 .project-item-actions .btn {
     padding: 4px 8px;
     font-size: 12px;
+}
+
+/* ==================== 导出预览样式 ==================== */
+
+.export-preview-container {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(252, 238, 10, 0.2);
+    border-radius: 8px;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.preview-placeholder {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.preview-placeholder i {
+    font-size: 48px;
+    margin-bottom: 10px;
+    display: block;
+}
+
+.preview-placeholder p {
+    margin: 0;
+    font-size: 14px;
+}
+
+#exportPreviewImage {
+    object-fit: contain;
+}
+
+/* 平滑级别对比模态框 */
+#smoothCompareModal .modal-body {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+#smoothCompareGrid {
+    display: flex;
+    gap: 10px;
+}
+
+#smoothCompareGrid .col {
+    flex: 1;
+    min-width: 0;
+}
+
+#smoothCompareGrid h6 {
+    color: var(--primary);
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.compare-img {
+    border: 2px solid rgba(252, 238, 10, 0.3);
+    transition: var(--transition);
+    cursor: pointer;
+}
+
+.compare-img:hover {
+    border-color: var(--primary);
+    box-shadow: 0 0 15px var(--primary-glow);
+}
+
+#exportPreviewStats {
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+/* 导出模态框增强 */
+#exportModal .modal-body .row {
+    align-items: flex-start;
+}
+
+#exportModal .col-md-6:first-child {
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    padding-right: 20px;
+}
+
+#exportModal .col-md-6:last-child {
+    padding-left: 20px;
+}
+
+/* ==================== 图片放大查看器 ==================== */
+
+.image-viewer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 10000;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    cursor: zoom-out;
+}
+
+.image-viewer-overlay.active {
+    display: flex;
+}
+
+.image-viewer-container {
+    position: relative;
+    max-width: 95vw;
+    max-height: 95vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.image-viewer-img {
+    max-width: 100%;
+    max-height: 90vh;
+    object-fit: contain;
+    border: 2px solid var(--primary);
+    border-radius: 8px;
+    box-shadow: 0 0 50px rgba(252, 238, 10, 0.3);
+    transition: transform 0.3s ease;
+}
+
+.image-viewer-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    background: transparent;
+    border: none;
+    color: var(--primary);
+    font-size: 32px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.image-viewer-close:hover {
+    color: #fff;
+    transform: scale(1.2);
+}
+
+.image-viewer-controls {
+    position: absolute;
+    bottom: -50px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+}
+
+.image-viewer-controls button {
+    background: rgba(252, 238, 10, 0.2);
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 14px;
+}
+
+.image-viewer-controls button:hover {
+    background: var(--primary);
+    color: #000;
+}
+
+.image-viewer-info {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+}
+
+/* 预览图可点击样式 */
+#exportPreviewImage,
+.compare-img {
+    cursor: zoom-in;
+    transition: var(--transition);
+}
+
+#exportPreviewImage:hover,
+.compare-img:hover {
+    opacity: 0.9;
+    box-shadow: 0 0 20px var(--primary-glow);
+}
+
+/* 工具栏勾选框样式 */
+.toolbar-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.toolbar-checkbox:hover {
+    background: rgba(252, 238, 10, 0.1);
+    border-color: var(--primary);
+}
+
+.toolbar-checkbox .form-check-input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.toolbar-checkbox .form-check-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.toolbar-checkbox .form-check-input:checked + .form-check-label {
+    color: var(--primary);
+}
+
+.toolbar-checkbox .form-check-input:checked {
+    background-color: var(--primary);
+    border-color: var(--primary);
 }
